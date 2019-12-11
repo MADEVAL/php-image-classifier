@@ -1,0 +1,12 @@
+{
+  "labels": [
+    {
+      "label_name": "cat",
+      "training_images_path": "../../assets/training_images_dir/cat"
+    },
+    {
+      "label_name": "dog",
+      "training_images_path": "../../assets/training_images_dir/dog"
+    }
+  ]
+}
