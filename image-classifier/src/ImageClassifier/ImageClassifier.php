@@ -103,13 +103,24 @@ class ImageClassifier
             //reassign the new validated path
             $this->configuration['labels'][$key]['training_images_path'] = $path;
         }
+
+        if($this->isVerbose){
+            echo "Configuration initialization done";
+        }
     }
 
     /**
-     * trains the model based on the provided images and labels
+     * prepares training images
      * @throws ImageClassifierException
      */
-    public function train(){
+    private function prepareTrainingImages(){
+
+        //define convolution matrix
+        $convolution_matrix = array(
+            [-1, 0, 1],
+            [-2, 0, 2],
+            [-1, 0, 1]
+        );
 
         //prepare the images for training
         foreach ($this->configuration['labels'] as $key => $label){
@@ -126,8 +137,8 @@ class ImageClassifier
                 $image_data = getimagesize($image_resource_path);
 
                 //check file is of correct type
-                if(!preg_match("/image/",$image_data['mime'])){
-                    throw new ImageClassifierException("The file '".$iterator->key()."', under the label '".$label."' and path '".$path."' is not a valid image");
+                if($image_data['mime'] !== "image/png" && $image_data['mime'] !== 'image/jpeg'){
+                    throw new ImageClassifierException("The file '".$iterator->key()."', under the label '".$label."' and path '".$path."' is not a valid image. Use (.png or .jpg images)");
                 }
 
                 //check if width and height are equal
@@ -139,10 +150,31 @@ class ImageClassifier
                 }
 
                 //resize the image to 150 by 150
-                $image_resource = ImageHandler::resizeImage($image_resource_path,150,150,$image_data['mime']);
+                $image_resource = ImageHandler::resizeImage($image_resource_path,150,150);
+
+                //convolution and max pooling
+                for ($i = 0; $i < 3; $i++){
+                    imageconvolution($image_resource,$convolution_matrix,1,127);
+                    $image_resource = ImageHandler::maxPooling_2d($image_resource);
+                }
+
+                //end of file iterator
             }
 
+            //end of labels foreach
         }
+
+
+    }
+
+    /**
+     * trains the model based on the provided images and labels
+     * @throws ImageClassifierException
+     */
+    public function train(){
+
+        //prepare training images
+        $this->prepareTrainingImages();
     }
 
     //end of class
