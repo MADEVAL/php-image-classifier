@@ -2,11 +2,26 @@
 
 namespace ImageClassifier\Helper;
 
+use ImageClassifier\Exception\ImageHandlerException;
 
 class ImageHandler
 {
+    private $isVerbose;
 
-    public static function resizeImage($file, $w, $h, $crop = FALSE) {
+    function __construct($is_verbose = false)
+    {
+        $this->isVerbose = $is_verbose;
+    }
+
+    /**
+     * resizes images
+     * @param $file
+     * @param $w
+     * @param $h
+     * @param bool $crop
+     * @return bool|resource
+     */
+    public function resizeImage($file, $w, $h, $crop = FALSE) {
 
         $image_data = getimagesize($file);
 
@@ -63,10 +78,15 @@ class ImageHandler
      * performs max pooling for the specified image
      * @param $image_resource
      * @return resource
+     * @throws ImageHandlerException
      */
-    public static function maxPooling_2d($image_resource){
+    public function maxPooling_2d($image_resource){
 
         $size = imagesx($image_resource);
+
+        if($size < 8){
+            throw new ImageHandlerException("Cannot perform 2d max pool on image less than 8x8 pixels in size");
+        }
 
         $new_size = floor($size / 4);
 
@@ -152,6 +172,33 @@ class ImageHandler
         }
 
         return $new_image_resource;
+    }
+
+    /**
+     * returns an images pixel values in a 1-dimensional array
+     * @param $image_resource
+     * @return array
+     * @throws ImageHandlerException
+     */
+    public function getPixelValues_1d($image_resource){
+
+        $size = imagesx($image_resource);
+
+        if($size < 1){
+            throw new ImageHandlerException("The image resource has no pixels");
+        }
+
+        //read the pixel values
+        $pixels = [];
+
+        for ($y = 0; $y < $size; $y++){
+
+            for ($x = 0; $x < $size; $x++){
+                $pixels[] = imagecolorat($image_resource,$x,$y);
+            }
+        }
+
+        return $pixels;
     }
 
     //end of class

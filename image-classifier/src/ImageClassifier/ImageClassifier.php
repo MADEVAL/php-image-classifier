@@ -2,18 +2,25 @@
 
 namespace ImageClassifier;
 
-
 use FilesystemIterator;
 use ImageClassifier\Exception\ConfigException;
 use ImageClassifier\Exception\ImageClassifierException;
+use ImageClassifier\Exception\ImageHandlerException;
 use ImageClassifier\Helper\ImageHandler;
+use Phpml\Classification\KNearestNeighbors;
 
 class ImageClassifier
 {
 
     private $configuration;
 
+    private $imageHandler;
+
+    private $classifier;
+
     private $isVerbose;
+
+    private $isModelTrained;
 
     /**
      * ImageClassifier constructor.
@@ -22,20 +29,28 @@ class ImageClassifier
      */
     function __construct($is_verbose = false)
     {
+        //set if the classifier should echo out its output
         $this->isVerbose = $is_verbose;
 
+        //set the below value to false initially, until the model is trained
+        $this->isModelTrained = false;
+
+        //initialize image handler
+        $this->imageHandler = new ImageHandler($is_verbose);
+
+        //initialize classifier
+        $this->classifier = new KNearestNeighbors();
+
+        //initialize configuration
         try {
             $this->initializeConfiguration();
         } catch (ConfigException $e) {
-
-            if($this->isVerbose){
-                echo $e->getMessage();
-            }else{
-                throw new ImageClassifierException("Configuration Initialization failed: ".$e->getMessage());
-            }
-
-            return;
+            throw new ImageClassifierException("Configuration Initialization failed: ".$e->getMessage());
         }
+
+        //prepare training images
+        $this->prepareTrainingImages();
+
     }
 
     /**
@@ -115,6 +130,9 @@ class ImageClassifier
      */
     private function prepareTrainingImages(){
 
+        //define array for storing the training pixels
+        $training_pixels = [];
+
         //define convolution matrix
         $convolution_matrix = array(
             [-1, 0, 1],
@@ -150,13 +168,29 @@ class ImageClassifier
                 }
 
                 //resize the image to 150 by 150
-                $image_resource = ImageHandler::resizeImage($image_resource_path,150,150);
+                $image_resource =  $this->imageHandler->resizeImage($image_resource_path,150,150);
 
-                //convolution and max pooling
+                //convolution and max pooling at least three times
                 for ($i = 0; $i < 3; $i++){
+
                     imageconvolution($image_resource,$convolution_matrix,1,127);
-                    $image_resource = ImageHandler::maxPooling_2d($image_resource);
+
+                    try {
+                        $image_resource = $this->imageHandler->maxPooling_2d($image_resource);
+                    } catch (ImageHandlerException $e) {
+                        throw new ImageClassifierException("An error occurred during pooling: ".$e->getMessage());
+                    }
                 }
+
+                //get pixel values of the processed image in 1-dimensional array
+                try {
+                    $pixels_1d = $this->imageHandler->getPixelValues_1d($image_resource);
+                } catch (ImageHandlerException $e) {
+                    throw new ImageClassifierException("An error occurred while retrieving pixel values: ".$e->getMessage());
+                }
+
+                //add the retrieved pixels array into the training array with its appropriate label
+                $training_pixels[$label] = $pixels_1d;
 
                 //end of file iterator
             }
@@ -164,7 +198,7 @@ class ImageClassifier
             //end of labels foreach
         }
 
-
+        return $training_pixels;
     }
 
     /**
@@ -174,7 +208,86 @@ class ImageClassifier
     public function train(){
 
         //prepare training images
-        $this->prepareTrainingImages();
+        $training_pixels = $this->prepareTrainingImages();
+
+        if(count($training_pixels) < 1){
+            throw new ImageClassifierException("The training_pixels array returned empty");
+        }
+
+        $samples = [];
+        $labels = [];
+
+        //insert the data into the training model
+        foreach ($training_pixels as $key => $pixel_sample){
+            $samples[] = $pixel_sample;
+            $labels[] = $key;
+        }
+
+        $this->classifier->train($samples,$labels);
+
+        $this->isModelTrained = true;
+
+    }
+
+    /**
+     * classifies the specified image
+     * @throws ImageClassifierException
+     */
+    public function classify($image_path){
+
+        //check if the model has been trained
+        if($this->isModelTrained){
+            throw new ImageClassifierException("The model has not been trained");
+        }
+
+        //get image data
+        $image_data = getimagesize($image_path);
+
+        //check file is of correct type
+        if($image_data['mime'] !== "image/png" && $image_data['mime'] !== 'image/jpeg'){
+            throw new ImageClassifierException("The file '".$image_path."', is not a valid image. Use (.png or .jpg images)");
+        }
+
+        //check if the width and height are equal
+        $width = $image_data[0];
+        $height = $image_data[1];
+
+        if($width !== $height){
+            throw new ImageClassifierException("The image '".$image_path."', must have an equal width and height");
+        }
+
+        //resize the image to 150 by 150
+        $image_resource =  $this->imageHandler->resizeImage($image_path,150,150);
+
+        //convolution and max pooling at least three times
+        //define convolution matrix
+        $convolution_matrix = array(
+            [-1, 0, 1],
+            [-2, 0, 2],
+            [-1, 0, 1]
+        );
+
+        for ($i = 0; $i < 3; $i++){
+
+            imageconvolution($image_resource,$convolution_matrix,1,127);
+
+            try {
+                $image_resource = $this->imageHandler->maxPooling_2d($image_resource);
+            } catch (ImageHandlerException $e) {
+                throw new ImageClassifierException("An error occurred during pooling: ".$e->getMessage());
+            }
+        }
+
+        //get pixel values of the processed image in 1-dimensional array
+        try {
+            $pixels_1d = $this->imageHandler->getPixelValues_1d($image_resource);
+        } catch (ImageHandlerException $e) {
+            throw new ImageClassifierException("An error occurred while retrieving pixel values: ".$e->getMessage());
+        }
+
+        //classify the image
+        return $this->classifier->predict($pixels_1d);
+
     }
 
     //end of class
