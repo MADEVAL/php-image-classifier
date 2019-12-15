@@ -3,7 +3,7 @@
 use ImageClassifier\Exception\ImageClassifierException;
 use ImageClassifier\ImageClassifier;
 
-require_once "./image-classifier/autoload.php";
+require_once "../image-classifier/autoload.php";
 
 try {
 
