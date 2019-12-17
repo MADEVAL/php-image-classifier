@@ -9,7 +9,8 @@ try {
 
     $classifier = new ImageClassifier(true);
     $classifier->train();
-    $classifier->classify();
+
+    echo "Your prediction is '".$classifier->classify("./d3.jpg")."'";
 
 } catch (ImageClassifierException $e) {
     echo $e->getMessage();

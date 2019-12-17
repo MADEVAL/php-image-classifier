@@ -12,6 +12,8 @@ use Phpml\Classification\KNearestNeighbors;
 class ImageClassifier
 {
 
+    const CONVOLUTION_N_MAX_POOL_LOOP_COUNT = 2;
+
     private $configuration;
 
     private $imageHandler;
@@ -47,9 +49,6 @@ class ImageClassifier
         } catch (ConfigException $e) {
             throw new ImageClassifierException("Configuration Initialization failed: ".$e->getMessage());
         }
-
-        //prepare training images
-        $this->prepareTrainingImages();
 
     }
 
@@ -120,7 +119,7 @@ class ImageClassifier
         }
 
         if($this->isVerbose){
-            echo "Configuration initialization done";
+            echo "Configuration initialization done! \n\n";
         }
     }
 
@@ -129,6 +128,10 @@ class ImageClassifier
      * @throws ImageClassifierException
      */
     private function prepareTrainingImages(){
+
+        if($this->isVerbose){
+            echo "Preparing images... \n\n";
+        }
 
         //define array for storing the training pixels
         $training_pixels = [];
@@ -143,20 +146,28 @@ class ImageClassifier
         //prepare the images for training
         foreach ($this->configuration['labels'] as $key => $label){
 
-            $label = $label['label_name'];
+            $label_name = $label['label_name'];
             $path = $label['training_images_path'];
+
+            if($this->isVerbose){
+                echo "Processing '".$label_name."' images \n\n";
+            }
 
             $iterator = new FilesystemIterator($path);
 
+            $iterator_counter = 0;
+            $iterator_size = iterator_count($iterator);
+            $iterator->seek(0);
+
             while ($iterator->valid()){
 
-                $image_resource_path = $iterator->getFilename();
+                $image_resource_path = $iterator->getPathname();
 
                 $image_data = getimagesize($image_resource_path);
 
                 //check file is of correct type
                 if($image_data['mime'] !== "image/png" && $image_data['mime'] !== 'image/jpeg'){
-                    throw new ImageClassifierException("The file '".$iterator->key()."', under the label '".$label."' and path '".$path."' is not a valid image. Use (.png or .jpg images)");
+                    throw new ImageClassifierException("The file '".$iterator->key()."', under the label '".$label_name."' and path '".$path."' is not a valid image. Use (.png or .jpg images)");
                 }
 
                 //check if width and height are equal
@@ -164,14 +175,14 @@ class ImageClassifier
                 $height = $image_data[1];
 
                 if($width !== $height){
-                    throw new ImageClassifierException("The image '".$iterator->key()."', under the label '".$label."' and path '".$path."' must have an equal width and height");
+                    throw new ImageClassifierException("The image '".$iterator->key()."', under the label '".$label_name."' and path '".$path."' must have an equal width and height");
                 }
 
                 //resize the image to 150 by 150
                 $image_resource =  $this->imageHandler->resizeImage($image_resource_path,150,150);
 
                 //convolution and max pooling at least three times
-                for ($i = 0; $i < 3; $i++){
+                for ($i = 0; $i < self::CONVOLUTION_N_MAX_POOL_LOOP_COUNT; $i++){
 
                     imageconvolution($image_resource,$convolution_matrix,1,127);
 
@@ -190,7 +201,25 @@ class ImageClassifier
                 }
 
                 //add the retrieved pixels array into the training array with its appropriate label
-                $training_pixels[$label] = $pixels_1d;
+                $training_entry = [];
+                $training_entry[] = $label_name;
+                $training_entry[] = $pixels_1d;
+
+                $training_pixels[] = $training_entry;
+
+                $iterator_counter++;
+
+                if($this->isVerbose){
+
+                    if($iterator_counter === $iterator_size){
+                        echo "Processed ".$iterator_counter."/".$iterator_size." images \n\n";
+                    }else{
+                        echo "Processed ".$iterator_counter."/".$iterator_size." images \n";
+                    }
+
+                }
+
+                $iterator->next();
 
                 //end of file iterator
             }
@@ -207,6 +236,10 @@ class ImageClassifier
      */
     public function train(){
 
+        if($this->isVerbose){
+            echo "Began training \n\n";
+        }
+
         //prepare training images
         $training_pixels = $this->prepareTrainingImages();
 
@@ -218,9 +251,9 @@ class ImageClassifier
         $labels = [];
 
         //insert the data into the training model
-        foreach ($training_pixels as $key => $pixel_sample){
-            $samples[] = $pixel_sample;
-            $labels[] = $key;
+        foreach ($training_pixels as $key => $training_entry){
+            $samples[] = $training_entry[1];
+            $labels[] = $training_entry[0];
         }
 
         $this->classifier->train($samples,$labels);
@@ -236,7 +269,7 @@ class ImageClassifier
     public function classify($image_path){
 
         //check if the model has been trained
-        if($this->isModelTrained){
+        if(!$this->isModelTrained){
             throw new ImageClassifierException("The model has not been trained");
         }
 
@@ -267,7 +300,7 @@ class ImageClassifier
             [-1, 0, 1]
         );
 
-        for ($i = 0; $i < 3; $i++){
+        for ($i = 0; $i < self::CONVOLUTION_N_MAX_POOL_LOOP_COUNT; $i++){
 
             imageconvolution($image_resource,$convolution_matrix,1,127);
 

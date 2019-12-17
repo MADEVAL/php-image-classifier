@@ -94,9 +94,6 @@ class ImageHandler
         imagealphablending($new_image_resource,false);
         imagesavealpha($new_image_resource,true);
 
-        $global_x = 0;
-        $global_y = 0;
-
         $l_pixel_matrix = [];
 
         //read all pixel values within the large strides
@@ -106,10 +103,21 @@ class ImageHandler
 
                 $s_pixel_matrix = [];
 
-                for ( ; $global_y < $l_y_stride + 4; $global_y++){
+                //get coordinates of the four small strides
+                $s_stride_coordinates = array(
+                    [$l_y_stride, $l_x_stride],
+                    [$l_y_stride, $l_x_stride + 2],
+                    [$l_y_stride + 2, $l_x_stride],
+                    [$l_y_stride + 2, $l_x_stride + 2]
+                );
 
-                    for ( ; $global_x < $l_x_stride + 4; $global_x++){
-                        $s_pixel_matrix[$global_y][$global_x] = imagecolorat($image_resource,$global_x,$global_y);
+                foreach ($s_stride_coordinates as $s_coordinate){
+
+                    for($s_y = $s_coordinate[0]; $s_y < $s_coordinate[0] + 2; $s_y++){
+
+                        for($s_x = $s_coordinate[1]; $s_x < $s_coordinate[1] + 2; $s_x++){
+                            $s_pixel_matrix[$s_y][$s_x] = imagecolorat($image_resource,$s_x,$s_y);
+                        }
                     }
                 }
 
