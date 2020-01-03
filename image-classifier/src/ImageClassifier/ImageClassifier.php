@@ -8,6 +8,7 @@ use ImageClassifier\Exception\ImageClassifierException;
 use ImageClassifier\Exception\ImageHandlerException;
 use ImageClassifier\Helper\ImageHandler;
 use Phpml\Classification\KNearestNeighbors;
+use Phpml\Classification\SVC;
 
 class ImageClassifier
 {
